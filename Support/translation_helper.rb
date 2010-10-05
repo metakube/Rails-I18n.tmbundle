@@ -47,7 +47,7 @@ class TranslationHelper
       interpolations << interpolation[1].strip
     end
 
-    default_specific_key = interpolated_translation.gsub(/[^\w\?\! ]/,'').gsub('-','_').split(' ')[0..3].join('_').downcase
+    default_specific_key = interpolated_translation.gsub(/[^\w ]/,'').gsub('-','_').split(' ')[0..3].join('_').downcase
     default_key = default_scope + '.' + default_specific_key
 
     key, translation, interpolations = prompt_for_translation(default_key, interpolated_translation, interpolations)
