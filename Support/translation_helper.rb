@@ -1,5 +1,6 @@
 require 'rubygems'
 require 'i18n'
+require 'ftools'
 require ENV['TM_SUPPORT_PATH'] + '/lib/ui.rb'
 require ENV['TM_BUNDLE_SUPPORT'] + '/lib/extensions'
 require ENV['TM_BUNDLE_SUPPORT'] + '/bundle_config'
@@ -19,14 +20,44 @@ class TranslationHelper
   def add_translation
     original_text = ENV['TM_SELECTED_TEXT'] || ""
     translation = original_text.gsub(/^(['"])(.+)(\1)$/, '\2')
-        
-    key, translation = prompt_for_translation(self.preferences[:last_key], translation)
-    if key    
-      self.preferences[:last_key] = key 
+    
+    default_scope = self.preferences[:last_key].split('.')[0..-2].join('.')
+
+    view_key = false # determine whether we can shorten what we insert
+    if ENV['TM_FILEPATH'] =~ /\/views\/([^\.]+)/
+      view_key = true
+      default_scope = $1.split('/').join('.')
+    elsif ENV['TM_FILEPATH'] =~ /\/models\/([^\.]+)/
+      default_scope = $1.split('/').join('.')
+    elsif ENV['TM_FILEPATH'] =~ /\/controllers\/([^\.]+)/
+      default_scope = $1.split('/').join('.')
+    elsif ENV['TM_FILEPATH'] =~ /\/mailers\/([^\.]+)/
+      default_scope = $1.split('/').join('.')
+    elsif ENV['TM_FILEPATH'] =~ /\/mailer_views\/([^\.]+)/
+      # view_key is false because the controller can't be inferred
+      default_scope = $1.split('/').join('.')
+    end
+    # attempt to auto-generate interpolations
+    interpolated_translation = translation
+    interpolations = []
+    translation.scan(/(<%=([^%]+)%>)/).each do |interpolation|
+      tokens = interpolation[1].gsub(/[^\w]/,' ').split(' ').compact # make a rough guess at a meaningful key
+      int_key = tokens.size > 2 ? tokens[-2] : tokens.last
+      interpolated_translation.gsub!(interpolation[0],"%{#{int_key}}")
+      interpolations << interpolation[1].strip
+    end
+
+    default_specific_key = interpolated_translation.gsub(/[^\w\?\! ]/,'').gsub('-','_').split(' ')[0..3].join('_').downcase
+    default_key = default_scope + '.' + default_specific_key
+
+    key, translation, interpolations = prompt_for_translation(default_key, interpolated_translation, interpolations)
+    if key
+      self.preferences[:last_key] = key
+      self.store = find_store(key)
       insertion_type = prompt_for_insertion_type
         
       print original_text and return if insertion_type.blank?
-      replacement = build_replacement_snippet(insertion_type, key, translation)
+      replacement = build_replacement_snippet(insertion_type, key, translation, interpolations, view_key && key.split('.')[0..-2].join('.') == default_scope)
 
       translation = remove_surrounding_quotes(translation)
 
@@ -46,6 +77,24 @@ class TranslationHelper
     print original_text
   end
   
+  def find_store(key)
+    scope_arr = key.split('.')[0..-2]
+    base_path = "#{ENV['TM_PROJECT_DIRECTORY']}/config/locales/"
+    relative_path = 'defaults.en.yml'
+    if ENV['TM_FILEPATH'] =~ /\/app\/([^\.]+)/
+      relative_path = $1 + '.en.yml'
+    end
+    path = base_path + relative_path
+    dir = path.split('/')[0..-2].join('/')
+    unless File.exists?(path)
+      File.makedirs(dir) unless File.exists?(dir)
+      File.open(path,"w") do |f|
+        f << "---\n#{CONFIG[:locale].to_s}:\n  {}" 
+      end
+    end
+    YAMLStore.new(self.locale, path)
+  end
+  
   def check
     if (ENV['TM_SELECTED_TEXT'])
       print check_one
@@ -63,20 +112,20 @@ class TranslationHelper
     return overwrite
   end
   
-  def prompt_for_translation(key = "", translation = "")
-    key, translation = TextMate::UI.dialog1(
+  def prompt_for_translation(key = "", translation = "", interpolations = [])
+    key, translation, interpolations = TextMate::UI.dialog1(
       :nib => self.options[:translation_nib], 
-      :parameters => {'translation' => translation, 'key' => key},  
+      :parameters => {'translation' => translation, 'key' => key, 'interpolations' => interpolations},  
       :options => {:center => true, :modal => true}
     ) do |results|
         if (results['returnButton'] == "Save")
-          return results['key'], results['translation']
+          return results['key'], results['translation'], results['interpolations']
         else
           # a button was not clicked (window closed, etc), or cancel was clicked
         end        
     end
     
-    return key, translation
+    return key, translation, interpolations
   end
   
   def prompt_for_insertion_type
@@ -105,10 +154,11 @@ class TranslationHelper
     return method
   end
   
-  def build_replacement_snippet(type, key, translation)
+  def build_replacement_snippet(type, key, translation, interpolations, shorten_scope)
+    key = '.' + key.split('.').last if shorten_scope
     arguments = "'#{key}'"
-    translation.scan(/\{\{(\w+)\}\}/).flatten.each_with_index do |interpolation, count|
-      arguments << ", :#{interpolation} => $#{count + 1}"
+    translation.scan(/\%\{(\w+)\}/).flatten.each_with_index do |interpolation, count|
+      arguments << ", :#{interpolation} => #{interpolations[count]}"
     end
     
     case type
