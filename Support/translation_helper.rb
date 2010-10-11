@@ -35,7 +35,8 @@ class TranslationHelper
       default_scope = $1.split('/').join('.')
     elsif ENV['TM_FILEPATH'] =~ /\/mailer_views\/([^\.]+)/
       # view_key is false because the controller can't be inferred
-      default_scope = $1.split('/').join('.')
+      # remove leading underscores since the default scoping ignores the partial distinction
+      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
     end
     # attempt to auto-generate interpolations
     interpolated_translation = translation
