@@ -26,13 +26,13 @@ class TranslationHelper
     view_key = false # determine whether we can shorten what we insert
     if ENV['TM_FILEPATH'] =~ /\/views\/([^\.]+)/
       view_key = true
-      default_scope = $1.split('/').join('.')
+      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
     elsif ENV['TM_FILEPATH'] =~ /\/models\/([^\.]+)/
-      default_scope = $1.split('/').join('.')
+      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
     elsif ENV['TM_FILEPATH'] =~ /\/controllers\/([^\.]+)/
-      default_scope = $1.split('/').join('.')
+      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
     elsif ENV['TM_FILEPATH'] =~ /\/mailers\/([^\.]+)/
-      default_scope = $1.split('/').join('.')
+      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
     elsif ENV['TM_FILEPATH'] =~ /\/mailer_views\/([^\.]+)/
       # view_key is false because the controller can't be inferred
       # remove leading underscores since the default scoping ignores the partial distinction
