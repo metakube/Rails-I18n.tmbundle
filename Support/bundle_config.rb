@@ -1,6 +1,6 @@
 CONFIG = {}
 CONFIG[:locale] = :en
-CONFIG[:locale_file_path] = "#{ENV['TM_PROJECT_DIRECTORY']}/config/locales/en.yml"
+CONFIG[:locale_file_path] = "#{ENV['TM_PROJECT_DIRECTORY']}/config/locales/defaults.en.yml"
 
 CONFIG[:bundle_preferences_path] = "~/Library/Preferences/com.macromates.textmate.rails_i18n_translation_helper.pstore"
 CONFIG[:project_directory] = ENV['TM_PROJECT_DIRECTORY']

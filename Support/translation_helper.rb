@@ -20,41 +20,46 @@ class TranslationHelper
   def add_translation
     original_text = ENV['TM_SELECTED_TEXT'] || ""
     translation = original_text.gsub(/^(['"])(.+)(\1)$/, '\2')
-    
     default_scope = self.preferences[:last_key].split('.')[0..-2].join('.')
-
     view_key = false # determine whether we can shorten what we insert
-    if ENV['TM_FILEPATH'] =~ /\/views\/([^\.]+)/
-      view_key = true
-      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
-    elsif ENV['TM_FILEPATH'] =~ /\/models\/([^\.]+)/
-      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
-    elsif ENV['TM_FILEPATH'] =~ /\/controllers\/([^\.]+)/
-      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
-    elsif ENV['TM_FILEPATH'] =~ /\/mailers\/([^\.]+)/
-      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
-    elsif ENV['TM_FILEPATH'] =~ /\/mailer_views\/([^\.]+)/
-      # view_key is false because the controller can't be inferred
-      # remove leading underscores since the default scoping ignores the partial distinction
-      default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
-    end
-    # attempt to auto-generate interpolations
-    interpolated_translation = translation
+    autoreplaced = false
     interpolations = []
-    translation.scan(/(<%=([^%]+)%>)/).each do |interpolation|
-      tokens = interpolation[1].gsub(/[^\w]/,' ').split(' ').compact # make a rough guess at a meaningful key
-      int_key = tokens.size > 2 ? tokens[-2] : tokens.last
-      interpolated_translation.gsub!(interpolation[0],"%{#{int_key}}")
-      interpolations << interpolation[1].strip
+    # if this is already in defaults, bypass everything and substitute
+    if k = self.store['defaults'].invert[translation]
+      autoreplaced = true
+      key = "defaults.#{k.to_s}"
+    else
+      if ENV['TM_FILEPATH'] =~ /\/views\/([^\.]+)/
+        view_key = true
+        default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
+      elsif ENV['TM_FILEPATH'] =~ /\/models\/([^\.]+)/
+        default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
+      elsif ENV['TM_FILEPATH'] =~ /\/controllers\/([^\.]+)/
+        default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
+      elsif ENV['TM_FILEPATH'] =~ /\/mailers\/([^\.]+)/
+        default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
+      elsif ENV['TM_FILEPATH'] =~ /\/mailer_views\/([^\.]+)/
+        # view_key is false because the controller can't be inferred
+        # remove leading underscores since the default scoping ignores the partial distinction
+        default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
+      end
+      # attempt to auto-generate interpolations
+      interpolated_translation = translation
+      translation.scan(/(<%=([^%]+)%>)/).each do |interpolation|
+        tokens = interpolation[1].gsub(/[^\w]/,' ').split(' ').compact # make a rough guess at a meaningful key
+        int_key = tokens.size > 2 ? tokens[-2] : tokens.last
+        interpolated_translation.gsub!(interpolation[0],"%{#{int_key}}")
+        interpolations << interpolation[1].strip
+      end
+
+      default_specific_key = interpolated_translation.gsub(/[^\w ]/,'').gsub('-','_').split(' ')[0..3].join('_').downcase
+      default_key = default_scope + '.' + default_specific_key
+
+      key, translation, interpolations = prompt_for_translation(default_key, interpolated_translation, interpolations)
     end
-
-    default_specific_key = interpolated_translation.gsub(/[^\w ]/,'').gsub('-','_').split(' ')[0..3].join('_').downcase
-    default_key = default_scope + '.' + default_specific_key
-
-    key, translation, interpolations = prompt_for_translation(default_key, interpolated_translation, interpolations)
     if key
       self.preferences[:last_key] = key
-      self.store = find_store(key)
+      self.store = find_store(key) unless autoreplaced
       insertion_type = prompt_for_insertion_type
         
       print original_text and return if insertion_type.blank?
@@ -63,7 +68,7 @@ class TranslationHelper
       translation = remove_surrounding_quotes(translation)
 
       begin
-        self.store[key] = translation
+        self.store[key] = translation unless autoreplaced
         log_translation(key, translation) if CONFIG[:log_changes]
         print replacement
         return
@@ -82,8 +87,8 @@ class TranslationHelper
     scope_arr = key.split('.')[0..-2]
     base_path = "#{ENV['TM_PROJECT_DIRECTORY']}/config/locales/"
     relative_path = 'defaults.en.yml'
-    if ENV['TM_FILEPATH'] =~ /\/app\/([^\.]+)/
-      relative_path = $1 + '.en.yml'
+    if !(key =~ /^defaults/) && ENV['TM_FILEPATH'] =~ /\/app\/([^\.]+)/
+      relative_path = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('/') + '.en.yml'
     end
     path = base_path + relative_path
     dir = path.split('/')[0..-2].join('/')
