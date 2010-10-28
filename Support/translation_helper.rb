@@ -45,7 +45,8 @@ class TranslationHelper
       end
       # attempt to auto-generate interpolations
       interpolated_translation = translation
-      translation.scan(/(<%=([^%]+)%>)/).each do |interpolation|
+      translation.scan(/(<%=([^%]+)%>)|(\#\{([^\}]+)\})/).each do |interpolation|
+        interpolation.compact!
         tokens = interpolation[1].gsub(/[^\w]/,' ').split(' ').compact # make a rough guess at a meaningful key
         int_key = tokens.size > 2 ? tokens[-2] : tokens.last
         interpolated_translation.gsub!(interpolation[0],"%{#{int_key}}")
