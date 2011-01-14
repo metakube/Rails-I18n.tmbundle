@@ -34,6 +34,8 @@ class TranslationHelper
         default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
       elsif ENV['TM_FILEPATH'] =~ /\/models\/([^\.]+)/
         default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
+      elsif ENV['TM_FILEPATH'] =~ /\/plugins\/([^\.]+)/
+        default_scope = $1.split('/').first.gsub(/^_/,'')
       elsif ENV['TM_FILEPATH'] =~ /\/controllers\/([^\.]+)/
         default_scope = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('.')
       elsif ENV['TM_FILEPATH'] =~ /\/mailers\/([^\.]+)/
@@ -90,7 +92,9 @@ class TranslationHelper
     relative_path = 'defaults.en.yml'
     if !(key =~ /^defaults/) && ENV['TM_FILEPATH'] =~ /\/app\/([^\.]+)/
       relative_path = $1.split('/').map{|e| e.gsub(/^_/,'')}.join('/') + '.en.yml'
-    end
+    elsif ENV['TM_FILEPATH'] =~ /\/vendor\/plugins\/([^\.]+)/
+      relative_path = 'plugins/' + $1.split('/').first + '.en.yml'
+    end 
     path = base_path + relative_path
     dir = path.split('/')[0..-2].join('/')
     unless File.exists?(path)
